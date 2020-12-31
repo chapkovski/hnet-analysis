@@ -1,0 +1,55 @@
+---
+title: "HNET analysis"
+author: "Philipp Chapkovski"
+date: "12/30/2020"
+output: html_document
+---
+
+```{r set - options, echo = FALSE, cache = FALSE}
+options(width = 5000)
+options(digits = 5)
+options(scipen = 50)
+options(dplyr.summarise.inform = F)
+knitr::opts_chunk$set(
+  echo = FALSE,
+  cache = T,
+  warning = F,
+  results = 'markup',
+  message = FALSE
+)
+
+```
+
+``` {r libraries}
+library('pacman')
+p_load('dplyr', 'estimatr', 'tidyverse', 'readxl', 'sjPlot', 'emmeans', 'olsrr', 'writexl', 'gtsummary', 'stargazer', 'magrittr', 'ggplot2', 'scales','lemon','knitr','ggpmisc', 'fastDummies', 'estimatr', 'sjPlot','haven',
+       'hrbrthemes','kableExtra', 'skimr','lubridate', 'data.table', 'gganimate','transformr', 'png','gifski','summarytools', 'dm', 'DBI')
+
+```
+
+```{r dbconnect}
+
+
+con <- dbConnect(odbc::odbc(),
+                 driver = "/usr/local/lib/libsqlite3odbc.dylib",
+                 database = "/Users/chapkovski/archive/hnet_scraper/db.sqlite3")
+dm <- dm_from_src(con)
+
+
+```
+
+## Number of posts per year
+
+Posts per year with moving average for 3 months
+
+## Posts per week per year 
+
+## Seasonality (posts per month)
+
+## Dynamics of professorship positions vs other positions
+
+## Black studies/Race studies positions
+
+## Feminism/Women studies positions
+
+## Positions posted by continent and country
