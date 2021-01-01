@@ -61,12 +61,18 @@ Posts per year with moving average for 3 months
 
 ```{r posts-per-month}
 
-posts %>% mutate(monthdate = as.Date(paste("2020", month, '01', sep = "-")))%>%
-group_by(monthdate, year) %>% summarise(n=n()) %>%
-  ggplot(aes(x=monthdate, y=n))+
-  geom_point(, stat='identity') +
-  geom_smooth(method = "loess")+
-   scale_x_date(date_breaks = "1 month", date_labels = "%b") 
+
+posts %>% mutate(monthdate = as.Date(paste("2020", month, '01', sep = "-"))) %>%
+  group_by(monthdate, year) %>% summarise(n = n()) %>% group_by(monthdate) %>%
+  mutate(lab = case_when(n == max(n) | n == min(n) ~ year),
+         vj= case_when(n == max(n) ~ -1.5 , n == min(n) ~ 1.5)) %>%
+  ggplot(aes(x = monthdate, y = n)) +
+  geom_point(, stat = 'identity') +
+  geom_smooth(method = "loess") +
+  scale_x_date(date_breaks = "1 month", date_labels = "%b") +
+  xlab('Month') +
+  ylab('Number of posts') + geom_text(aes(label = lab, vjust = vj))+
+  ylim(0,500)
 
 
 ```
