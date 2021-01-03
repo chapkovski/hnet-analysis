@@ -1,7 +1,7 @@
 ---
 title: "HNET analysis"
 author: "Philipp Chapkovski"
-date: "12/30/2020"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
 output: html_document
 ---
 
@@ -23,7 +23,7 @@ knitr::opts_chunk$set(
 ``` {r libraries}
 library('pacman')
 p_load('dplyr', 'estimatr', 'tidyverse', 'readxl', 'sjPlot', 'emmeans', 'olsrr', 'writexl', 'gtsummary', 'stargazer', 'magrittr', 'ggplot2', 'scales','lemon','knitr','ggpmisc', 'fastDummies', 'estimatr', 'sjPlot','haven',
-       'hrbrthemes','kableExtra', 'skimr','lubridate', 'data.table', 'gganimate','transformr', 'png','gifski','summarytools', 'dm', 'DBI')
+       'hrbrthemes','kableExtra', 'skimr','lubridate', 'data.table', 'gganimate','transformr', 'png','gifski','summarytools', 'dm', 'DBI', 'glue')
 
 ```
 
@@ -35,6 +35,29 @@ con <- dbConnect(odbc::odbc(),
                  database = "/Users/chapkovski/archive/hnet_scraper/db.sqlite3")
 dm <- dm_from_src(con)
 
+dm<-dm %>% 
+  dm_add_pk(hnet_structuredpost,id) %>% 
+  dm_add_pk(hnet_position,id) %>% 
+  dm_add_fk(hnet_structuredpost_positions,structuredpost_id, hnet_structuredpost)%>%
+  dm_add_fk(hnet_structuredpost_positions,position_id, hnet_position)
+
+drop.cols=c('created_at', 'updated_at' )
+position_tab <- dm %>%
+  dm_select(hnet_position, -one_of(drop.cols)) %>%
+  dm_select(hnet_structuredpost, -one_of(drop.cols))%>%
+  dm_disambiguate_cols(sep='.')%>%
+  dm_flatten_to_tbl(hnet_structuredpost_positions) %>%
+  as_tibble()%>%
+  rename(position=description)%>%
+  mutate(position=str_trim(position)) %>%
+    mutate(year=lubridate::year(posting_date),
+         month=lubridate::month(posting_date),
+         day=lubridate::day(posting_date),
+         weekday=lubridate::wday(posting_date),
+         week=lubridate::isoweek((posting_date)),
+         monthdate = as.Date(paste("2020", month, '01', sep = "-")),
+         fixeddate = as.Date(paste("2020", month, day, sep = "-"))
+         )
 
 ```
 
@@ -44,25 +67,77 @@ dm <- dm_from_src(con)
 posts<-as_tibble(tbl(con, "hnet_structuredpost") )%>%
   mutate(year=lubridate::year(posting_date),
          month=lubridate::month(posting_date),
-         day=lubridate::year(posting_date),
+         day=lubridate::day(posting_date),
          weekday=lubridate::wday(posting_date),
-         )
-
+         week=lubridate::isoweek((posting_date)),
+         monthdate = as.Date(paste("2020", month, '01', sep = "-")),
+         fixeddate = as.Date(paste("2020", month, day, sep = "-"))
+         ) %>%
+  group_by(week,year)%>%
+  mutate(weekdate=min(posting_date),
+         fixedweek=ymd(format(weekdate, "2020-%m-%d")))%>%
+  ungroup()
 ```
 
 ```{r plotting }
-posts %>% group_byggplot(aes())
+
+
+
+
+posts %>%
+  mutate(monthdate=ymd(glue('{year}-{month}-01')),
+         yeardate=ymd(glue('{year}-01-01')))%>%
+  group_by(yeardate)%>%
+  summarise(posts=n())%>%
+  ggplot(aes(x=yeardate, y=posts, fill=yeardate))+
+  geom_col(width = 200.8, position = position_dodge(width = 200.9)  )+
+  geom_label(aes(label=posts, y=posts/2 ),colour='white', size=3)+
+  scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
+   theme(axis.text.x = element_text(angle = 90))+xlab('')
+
+
 ```
 Posts per year with moving average for 3 months
 
 ## Posts per week per year 
+
+```{r polarplot}
+
+
+
+averages<-posts %>%
+  filter(year<2020)%>%
+  group_by(week, year) %>% 
+  summarise(posts=n()) %>%
+  group_by(week)%>%
+  summarise(averages=mean(posts))
+
+
+byweek<-posts %>%
+  group_by(year,fixedweek,week)%>%
+  summarise(posts= n())
+  full_join(byweek,averages) %>%
+  mutate(col=case_when(year==2020~'red',TRUE~'lightgray'))%>%
+  ggplot(aes(x=fixedweek, y=posts, group=year)) +
+  ylim(0,NA) +
+  geom_line(aes(color=col))+
+  geom_line(data=full_join(byweek,averages)%>%filter(year==2020),aes(x=fixedweek, y=averages, group=NA),color='blue')+
+  coord_polar(start =0) +
+  scale_color_identity() +
+  scale_x_date(date_breaks = "1 month", date_labels = "%b") +
+  xlab('Week of the year')+
+  ylab('Job ads posted per week')+
+  theme_ipsum()+
+  labs(title = "Posts per week")
+
+```
 
 ## Seasonality (posts per month)
 
 ```{r posts-per-month}
 
 
-posts %>% mutate(monthdate = as.Date(paste("2020", month, '01', sep = "-"))) %>%
+posts %>%
   group_by(monthdate, year) %>% summarise(n = n()) %>% group_by(monthdate) %>%
   mutate(lab = case_when(n == max(n) | n == min(n) ~ year),
          vj= case_when(n == max(n) ~ -1.5 , n == min(n) ~ 1.5)) %>%
@@ -78,8 +153,104 @@ posts %>% mutate(monthdate = as.Date(paste("2020", month, '01', sep = "-"))) %>%
 ```
 ## Dynamics of professorship positions vs other positions
 
+In the plot below percentages is a share of professorship positions in total number of job ads posted per year.
+
+For the last 10 years share of professorship positions are in decline. It substantially fell in 2020 to less than a half. We might believe it's because other positions are posted more often, but in fact total number of posts per year is also in decline (we of course cannot guarantee that it's not due to falling popularity of H-Net website as an advertising platform) 
+
+```{r positions}
+
+position_tab %>%
+  mutate(prof=str_detect(position, 'Professor')) %>%
+  mutate(prof = if_else(prof,  "Yes", "No")) %>%
+  group_by(prof, year)%>%
+  tally() %>%
+  filter(year>2003)%>%
+  group_by(year)%>%
+  mutate(freq=if_else(prof=='Yes', n/sum(n), NA_real_))%>%
+  ggplot(aes(x=year, y=n, fill=prof))+
+  geom_col()+
+  geom_label(aes(label=label_percent(accuracy=1)(freq)))+
+  labs(fill='Professor positions')+
+  theme_ipsum()
+  
+
+
+```
+
 ## Black studies/Race studies positions
 
 ## Feminism/Women studies positions
 
 ## Positions posted by continent and country
+
+```{r locations}
+
+# RUN THE FOLLOWING JUST ONCE BECAUSE IT REQUESTS A BUNCH OF THINGS FROM GEOCODING API (*TWICE*); THE RESULTS ARE SAVED IN .csv 
+# 
+# p_load('ggmap','revgeo')
+# 
+# api_key<-'YOUR API KEY'
+# register_google(key = api_key)
+
+
+# loc2country <- function(loc) {
+#   latlon <-
+#     ggmap::geocode(location = c(loc),
+#                    output = "latlon",
+#                    source = "google") %>% as_tibble()
+#   revgeo::revgeo(
+#     longitude = latlon$lon,
+#     latitude = latlon$lat,
+#     provider = 'google',
+#     API = api_key,
+#     output = 'hash',
+#     item = 'country'
+#   )$country
+# }
+
+# alllocs<-alllocs %>%
+#   arrange(location)%>%
+#   mutate(country=loc2country(location))
+
+# alllocs$continent <- countrycode(sourcevar = alllocs$ country,
+#                             origin = "country.name",
+#                             destination = "continent")
+
+# write.csv(alllocs, 'alllocs.csv')
+alllocs<- read.csv('alllocs.csv')
+alllocs <- alllocs %>% mutate(country=recode(country, `Yugoslavia`='Kosovo'))
+left_join(posts, alllocs) %>%
+  filter(year%in%c(2007,2020))%>%
+  group_by(continent, year)%>%
+  tally() %>%
+  group_by(year)%>%
+  mutate(freq=n/sum(n))%>%
+  pivot_wider(names_from=year,
+              values_from=freq,
+              id_cols=continent) %>%
+   mutate(mean = rowMeans(across(where(is.numeric))))%>%
+  arrange(mean)%>%
+  mutate(x=factor(continent),
+         value1=`2007`,
+         value2=`2020`)%>%
+  ggplot()+
+  geom_segment( aes(x=x, xend=x, y=value1, yend=value2), color="grey") +
+  geom_point( aes(x=x, y=value1), color=rgb(0.2,0.7,0.1,0.5), size=3 ) +
+  geom_point( aes(x=x, y=value2), color=rgb(0.7,0.2,0.1,0.5), size=3 ) +
+  coord_flip()+
+  theme_ipsum() +
+  theme(
+    legend.position = "none",
+  ) +
+  xlab("") +
+  ylab("Value of Y")+
+  geom_text(aes(x=x,   y=value1, vjust=2, label=label_percent(accuracy=1)(value1)))+
+  geom_text(aes(x=x,   y=value2, vjust=2, label=label_percent(accuracy=1)(value2)))+
+    geom_text(aes(x=x,   y=value1, vjust=-2, label='2007'))+
+  geom_text(aes(x=x,   y=value2, vjust=-2, label='2020'))+
+  ylim(0,1.2)
+
+
+
+?pivot_wider
+```
