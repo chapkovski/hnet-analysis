@@ -11,7 +11,7 @@ options(digits = 5)
 options(scipen = 50)
 options(dplyr.summarise.inform = F)
 knitr::opts_chunk$set(
-  echo = FALSE,
+  echo = T,
   cache = T,
   warning = F,
   results = 'markup',
@@ -23,11 +23,12 @@ knitr::opts_chunk$set(
 ``` {r libraries}
 library('pacman')
 p_load('dplyr', 'estimatr', 'tidyverse', 'readxl', 'sjPlot', 'emmeans', 'olsrr', 'writexl', 'gtsummary', 'stargazer', 'magrittr', 'ggplot2', 'scales','lemon','knitr','ggpmisc', 'fastDummies', 'estimatr', 'sjPlot','haven',
-       'hrbrthemes','kableExtra', 'skimr','lubridate', 'data.table', 'gganimate','transformr', 'png','gifski','summarytools', 'dm', 'DBI', 'glue')
+       'hrbrthemes','kableExtra', 'skimr','lubridate', 'data.table', 'gganimate','transformr', 'png','gifski','summarytools', 'dm', 'DBI', 'glue', 'extrafont', 'ggpubr')
+
 
 ```
 
-```{r dbconnect}
+```{r dbconnect, warning=FALSE}
 
 
 con <- dbConnect(odbc::odbc(),
@@ -112,6 +113,16 @@ secondary_cat_tab<-
 
 ```
 
+## Introduction
+
+This data was downloaded from <https://www.h-net.org/jobs> and parsed into a relational database using Python and Django. Parser is available [here]() and the most recent version of the database is available [here](https://osf.io/3sb52/). In total for the last 20 years (starting from 2000 till December 31, 2020) a bit more than 38.000 job ads were posted at H-Net: on average about 1800 position per year.
+
+Till recently about 2/3 of them  were professorship positions (from Assistant to Full professor), but for the last 5 years these positions are in decline and in 2020 this amount dropped to below 45%. 
+
+
+
+
+
 ## Number of posts per year
 
 ```{r preparing data for posts}
@@ -130,25 +141,34 @@ posts<-as_tibble(tbl(con, "hnet_structuredpost") )%>%
   ungroup()
 ```
 
-```{r plotting }
+```{r plotting,}
 
 
+theme_ipsum<-function(){list()}
 
-
-posts %>%
+posts_per_year_graph<-posts %>%
+  filter(year>2000)%>%
   mutate(monthdate=ymd(glue('{year}-{month}-01')),
          yeardate=ymd(glue('{year}-01-01')))%>%
   group_by(yeardate)%>%
   summarise(posts=n())%>%
   ggplot(aes(x=yeardate, y=posts, fill=yeardate))+
-  geom_col(width = 200.8, position = position_dodge(width = 200.9)  )+
-  geom_label(aes(label=posts, y=posts/2 ),colour='white', size=3)+
+      geom_segment(aes(
+      x = yeardate,
+      xend = yeardate,
+      y = 0,
+      yend = posts, 
+      color=yeardate
+    )) +
+  geom_point(size=3, fill='orange',color='black', pch = 21 )+
+  # geom_label(aes(label=posts, y=posts ),colour='white', size=3)+
   scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
-   theme(axis.text.x = element_text(angle = 90))+xlab('')
+   theme(axis.text.x = element_text(angle = 90))+xlab('')+ theme(legend.position = "none") +ylab('Posts per year')
 
 
 ```
-Posts per year with moving average for 3 months
+
+
 
 ## Posts per week per year 
 
@@ -157,7 +177,7 @@ Posts per year with moving average for 3 months
 
 
 averages<-posts %>%
-  filter(year<2020)%>%
+  filter(year>2000,year<2020)%>%
   group_by(week, year) %>% 
   summarise(posts=n()) %>%
   group_by(week)%>%
@@ -165,21 +185,38 @@ averages<-posts %>%
 
 
 byweek<-posts %>%
+  filter(year>2000)%>%
   group_by(year,fixedweek,week)%>%
   summarise(posts= n())
-  full_join(byweek,averages) %>%
-  mutate(col=case_when(year==2020~'red',TRUE~'lightgray'))%>%
+
+
+polar_graph<-  full_join(byweek,averages) %>%
+  mutate(col=case_when(year==2020~'red',TRUE~'lightgray'),size=case_when(year==2020~0.2,TRUE~0.1))%>%
   ggplot(aes(x=fixedweek, y=posts, group=year)) +
-  ylim(0,NA) +
-  geom_line(aes(color=col))+
-  geom_line(data=full_join(byweek,averages)%>%filter(year==2020),aes(x=fixedweek, y=averages, group=NA),color='blue')+
-  coord_polar(start =0) +
-  scale_color_identity() +
+  # ylim(0,NA) +
+  geom_line(aes(color=col,size=size))+
+  geom_line(data=full_join(byweek,averages)%>%filter(year==2020),aes(x=fixedweek, y=averages, group=NA,color='blue'))+
+  # coord_polar(start =0) +
+  # scale_color_identity() +
   scale_x_date(date_breaks = "1 month", date_labels = "%b") +
   xlab('Week of the year')+
   ylab('Job ads posted per week')+
-  theme_ipsum()+
-  labs(title = "Posts per week")
+    scale_size(range = c(0.5, 0.8))+
+  # labs(title = "Academic job ads in history: 2001-2020")+
+  scale_colour_manual(name = element_blank(),
+         values =c('blue'='blue','red'='red', 'lightgray'='lightgray'), labels = c('Average 2001-2019','Specific years 2001-2019', '2020'))+guides(size=F)+
+  theme_bw()+
+  # hrbrthemes::theme_ipsum()+
+  theme(legend.position = 'bottom',
+        legend.text=element_text(size=12))+
+  theme(
+                   plot.margin=unit(c(0,0,0,0), "cm"),
+                   )
+
+ggarrange( polar_graph, posts_per_year_graph,
+          labels = c("Job ads per week", "Job ads per year"),
+          ncol = 1, nrow = 2)
+
 
 ```
 
@@ -239,11 +276,15 @@ black_obj<-list(filter_str='frican|Race|lack',
 graph_builder <- function(data, obj, ordertype, rel=F) {
   if (rel){
     reltitle <- 'Share'
-    custom_scale<-  scale_y_continuous(labels = label_percent(accuracy=1))
+    custom_scale<-  list(scale_y_continuous(labels = label_percent(accuracy=1)),
+                         geom_line()
+                         )
+    segment_color<-"orange"
 
   } else {
     reltitle <- 'Number'
     custom_scale<-list()
+    segment_color<-"lightgreen"
   }
   
   subchain <- . %>% 
@@ -262,10 +303,10 @@ graph_builder <- function(data, obj, ordertype, rel=F) {
       xend = year,
       y = 0,
       yend = n
-    ), color = "lightgreen") +
+    ), color = segment_color) +
     geom_point(
       aes(x = year, y = n),
-      fill = obj$col,
+      fill = NA, #obj$col
       colour = 'black',
       size = 4 ,
       pch = 21
