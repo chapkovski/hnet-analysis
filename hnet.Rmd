@@ -39,7 +39,15 @@ dm<-dm %>%
   dm_add_pk(hnet_structuredpost,id) %>% 
   dm_add_pk(hnet_position,id) %>% 
   dm_add_fk(hnet_structuredpost_positions,structuredpost_id, hnet_structuredpost)%>%
-  dm_add_fk(hnet_structuredpost_positions,position_id, hnet_position)
+  dm_add_fk(hnet_structuredpost_positions,position_id, hnet_position)%>%
+  dm_add_pk(hnet_category,id) %>% 
+  dm_add_fk(hnet_structuredpost_primary_categories,structuredpost_id, hnet_structuredpost)%>%
+  dm_add_fk(hnet_structuredpost_primary_categories,category_id, hnet_category)%>%
+    dm_add_fk(hnet_structuredpost_secondary_categories,structuredpost_id, hnet_structuredpost)%>%
+  dm_add_fk(hnet_structuredpost_secondary_categories,category_id, hnet_category)
+
+
+
 
 drop.cols=c('created_at', 'updated_at' )
 position_tab <- dm %>%
@@ -58,6 +66,49 @@ position_tab <- dm %>%
          monthdate = as.Date(paste("2020", month, '01', sep = "-")),
          fixeddate = as.Date(paste("2020", month, day, sep = "-"))
          )
+
+# Preparing primary category analysis
+# 
+
+primary_cat_tab<-dm %>%
+  dm_select(hnet_category, -one_of(drop.cols)) %>%
+  dm_select(hnet_structuredpost, -one_of(drop.cols))%>%
+  dm_disambiguate_cols(sep='.')%>%
+  dm_flatten_to_tbl(hnet_structuredpost_primary_categories) %>%
+  as_tibble()%>%
+  rename(category=description)%>%
+  mutate(category=str_trim(category)) %>%
+    mutate(year=lubridate::year(posting_date),
+         month=lubridate::month(posting_date),
+         day=lubridate::day(posting_date),
+         weekday=lubridate::wday(posting_date),
+         week=lubridate::isoweek((posting_date)),
+         monthdate = as.Date(paste("2020", month, '01', sep = "-")),
+         fixeddate = as.Date(paste("2020", month, day, sep = "-"))
+         )
+
+# Preparing secondary category analysis
+# 
+
+secondary_cat_tab<-
+  dm %>%
+  dm_select(hnet_category, -one_of(drop.cols)) %>%
+  dm_select(hnet_structuredpost, -one_of(drop.cols))%>%
+  dm_disambiguate_cols(sep='.')%>%
+  dm_flatten_to_tbl(hnet_structuredpost_secondary_categories) %>%
+  as_tibble() %>%
+  rename(category=description)%>%
+  mutate(category=str_trim(category)) %>%
+    mutate(year=lubridate::year(posting_date),
+         month=lubridate::month(posting_date),
+         day=lubridate::day(posting_date),
+         weekday=lubridate::wday(posting_date),
+         week=lubridate::isoweek((posting_date)),
+         monthdate = as.Date(paste("2020", month, '01', sep = "-")),
+         fixeddate = as.Date(paste("2020", month, day, sep = "-"))
+         )
+
+
 
 ```
 
@@ -179,7 +230,76 @@ position_tab %>%
 
 ## Black studies/Race studies positions
 
+```{r cat-black}
+
+black_obj<-list(filter_str='frican|Race|lack',
+                title='Black/African/African-American', col='navyblue')
+
+
+graph_builder <- function(data, obj, ordertype, rel=F) {
+  if (rel){
+    reltitle <- 'Share'
+    custom_scale<-  scale_y_continuous(labels = label_percent(accuracy=1))
+
+  } else {
+    reltitle <- 'Number'
+    custom_scale<-list()
+  }
+  
+  subchain <- . %>% 
+    group_by(year)%>%
+  mutate(n=n/sum(n))
+  
+  data %>%
+    mutate(black = str_detect(category, obj$filter_str)) %>%
+    group_by(black,year) %>%
+    tally() %>%
+   {if(rel) subchain(.) else .} %>%
+    filter(black == T) %>%
+    ggplot(aes(x = year,  y = n)) +
+    geom_segment(aes(
+      x = year,
+      xend = year,
+      y = 0,
+      yend = n
+    ), color = "lightgreen") +
+    geom_point(
+      aes(x = year, y = n),
+      fill = obj$col,
+      colour = 'black',
+      size = 4 ,
+      pch = 21
+    ) +
+    custom_scale +
+    ggtitle(glue("{reltitle}  of {obj$title}  positions"), subtitle=glue('({ordertype})'))
+}
+
+graph_builder(primary_cat_tab, black_obj, 'primary', rel=F)
+graph_builder(secondary_cat_tab, black_obj, 'secondary', rel=F)
+
+graph_builder(primary_cat_tab, black_obj, 'primary', rel=T)
+graph_builder(secondary_cat_tab, black_obj, 'secondary', rel=T)
+
+
+
+```
+
 ## Feminism/Women studies positions
+
+```{r cat-women}
+
+women_obj<-list(filter_str='wom|Wom|fem|Fem|Gend|gend',title='Women/Gender', col='pink')
+graph_builder(primary_cat_tab, women_obj, 'primary', rel=F)
+graph_builder(secondary_cat_tab, women_obj, 'secondary', rel=F)
+
+graph_builder(primary_cat_tab, women_obj, 'primary', rel=T)
+graph_builder(secondary_cat_tab, women_obj, 'secondary', rel=T)
+
+
+
+```
+
+
 
 ## Positions posted by continent and country
 
@@ -248,9 +368,11 @@ left_join(posts, alllocs) %>%
   geom_text(aes(x=x,   y=value2, vjust=2, label=label_percent(accuracy=1)(value2)))+
     geom_text(aes(x=x,   y=value1, vjust=-2, label='2007'))+
   geom_text(aes(x=x,   y=value2, vjust=-2, label='2020'))+
-  ylim(0,1.2)
+  ylim(0,1.2)+
+  scale_y_continuous(labels = label_percent())
+
+```
 
 
-
-?pivot_wider
+```{r positions-absolute}
 ```
