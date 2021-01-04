@@ -1,8 +1,13 @@
 ---
-title: "HNET analysis"
-author: "Philipp Chapkovski"
+title: 20 years of academic job market in History
+author: "Philipp Chapkovski, HSE-Moscow"
+address:
+  - code: Higher School of Economics
+    address: Pokrovsky Blvd, 11, Moscow, 109028, Russia
 date: "`r format(Sys.time(), '%d %B, %Y')`"
-output: html_document
+output: pdf_document
+urlcolor: blue
+abstract: This paper (draft) is a first attempt of analysing the dataset of academic job market in History using the posts from H-Net website. We can see a significant decline in available professor positions for the last 10 years, and a sharp fall in available jobs due to COVID-19.
 ---
 
 ```{r set - options, echo = FALSE, cache = FALSE}
@@ -11,7 +16,7 @@ options(digits = 5)
 options(scipen = 50)
 options(dplyr.summarise.inform = F)
 knitr::opts_chunk$set(
-  echo = T,
+  echo = F,
   cache = T,
   warning = F,
   results = 'markup',
@@ -115,7 +120,7 @@ secondary_cat_tab<-
 
 ## Introduction
 
-This data was downloaded from <https://www.h-net.org/jobs> and parsed into a relational database using Python and Django. Parser is available [here]() and the most recent version of the database is available [here](https://osf.io/3sb52/). In total for the last 20 years (starting from 2000 till December 31, 2020) a bit more than 38.000 job ads were posted at H-Net: on average about 1800 position per year.
+This data was downloaded from <https://www.h-net.org/jobs> and parsed into a relational database using Python and Django. Parser is available [here]() and the most recent version of the database is available [here](https://osf.io/3sb52/). The code for analysis is [here](https://github.com/chapkovski/hnet-analysis). In total for the last 20 years (starting from 2000 till December 31, 2020) a bit more than 38.000 job ads were posted at H-Net: on average about 1800 position per year.
 
 Till recently about 2/3 of them  were professorship positions (from Assistant to Full professor), but for the last 5 years these positions are in decline and in 2020 this amount dropped to below 45%. 
 
@@ -213,10 +218,11 @@ polar_graph<-  full_join(byweek,averages) %>%
                    plot.margin=unit(c(0,0,0,0), "cm"),
                    )
 
-ggarrange( polar_graph, posts_per_year_graph,
+g<-ggarrange( polar_graph, posts_per_year_graph,
           labels = c("Job ads per week", "Job ads per year"),
           ncol = 1, nrow = 2)
-
+g
+# ggsave('~/desktop/asdf', plot=g, device='png')
 
 ```
 
