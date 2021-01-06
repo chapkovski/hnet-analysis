@@ -394,9 +394,41 @@ cat_stp<- dm$hnet_structuredpost_primary_categories %>% as_tibble()
 
 pos_stp<- dm$hnet_structuredpost_positions %>% as_tibble()
 head(pos_stp)
+primcat_post_tab %>% names()
 
-t<-full_join(cat_stp, pos_stp, by='structuredpost_id') %>% left_join(dm$hnet_structuredpost %>% as_tibble(), by=c('structuredpost_id'='id')) 
-left_join(t, dm$hnet_position %>% as_tibble(), by=c('position_id'='id'))
+primcat_post_tab <- full_join(cat_stp, pos_stp, by='structuredpost_id')%>%
+  rename(primary_category_id=category_id) %>%
+  full_join(dm$hnet_structuredpost_secondary_categories%>%as_tibble(),by='structuredpost_id') %>%
+  rename(secondary_category_id=category_id) %>%
+  left_join(dm$hnet_structuredpost %>% as_tibble(), by=c('structuredpost_id'='id')) %>% 
+  left_join( dm$hnet_position %>% as_tibble(), by=c('position_id'='id')) %>%
+  rename(position=description) %>% 
+  left_join(dm$hnet_category %>% as_tibble(), by=c('primary_category_id'='id'))%>% rename(primary_category=description) %>%
+  left_join(dm$hnet_category %>% as_tibble(), by=c('secondary_category_id'='id'))%>% rename(secondary_category=description) %>%
+  select(-(matches("updated_at|created_at|id.")))
+
+primcat_post_tab %>%
+  filter(!is.na(position), !is.na(primary_category))%>%
+  mutate(prof=str_detect(position, 'Professor')) %>%
+  mutate(prof = if_else(prof,  "Professor", "Not professor")) %>%
+  mutate(woman = str_detect(primary_category, women_obj$filter_str)) %>%
+  mutate(year=lubridate::year(posting_date),
+         month=lubridate::month(posting_date),
+         day=lubridate::day(posting_date),
+         weekday=lubridate::wday(posting_date),
+         week=lubridate::isoweek((posting_date)),
+         monthdate = as.Date(paste("2020", month, '01', sep = "-")),
+         fixeddate = as.Date(paste("2020", month, day, sep = "-"))
+         )%>%
+    group_by(year,prof,woman) %>%
+  tally() %>%
+  group_by(year, prof)%>%
+  mutate(freq=n/sum(n)) %>% filter(woman==T)%>%
+  ggplot(aes(x=year, y=freq, colour=prof))+
+  geom_line()+
+  ylim(0,NA) +
+  hrbrthemes::theme_ipsum()
+  
 ```
 
 
