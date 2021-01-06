@@ -209,7 +209,8 @@ polar_graph<-  full_join(byweek,averages) %>%
     scale_size(range = c(0.5, 0.8))+
   # labs(title = "Academic job ads in history: 2001-2020")+
   scale_colour_manual(name = element_blank(),
-         values =c('blue'='blue','red'='red', 'lightgray'='lightgray'), labels = c('Average 2001-2019','Specific years 2001-2019', '2020'))+guides(size=F)+
+         values =c('blue'='blue','red'='red', 'lightgray'='lightgray'), labels = c('Average 2001-2019','Specific years 2001-2019', '2020'))+
+  guides(size=F)+
   theme_bw()+
   # hrbrthemes::theme_ipsum()+
   theme(legend.position = 'bottom',
@@ -253,6 +254,36 @@ For the last 10 years share of professorship positions are in decline. It substa
 
 ```{r positions}
 
+# let's make a lollipop graph for total num and prof positions only
+position_tab %>%
+  mutate(prof=str_detect(position, 'Professor')) %>%
+  mutate(prof = if_else(prof,  "Yes", "No")) %>%
+  group_by(year)%>%
+  group_by(prof, year)%>%
+  tally() %>%
+  filter(year>2003)%>%
+  group_by(year)%>%
+  mutate(tot=sum(n)) %>%
+  pivot_wider(names_from=prof,
+              values_from=n,
+              # id_cols=year
+              )%>%
+  ggplot(aes(x=year))+   geom_segment(aes(
+      x = year,
+      xend = year,
+      y = Yes,
+      yend = tot
+    ), color = 'lightgray') +
+  geom_point( aes(y=Yes,fill='orange'), pch=21, colour='black', size=4, )+
+    geom_point( aes(y=tot,fill='blue'), pch=21, , size=4,
+                colour='black')+
+  labs(fill='Professor positions')+
+  theme_ipsum()+ylim(0,NA)+
+    scale_fill_manual(name = element_blank(),
+         values =c('blue'='blue','orange'='orange'), labels = c('Total ','Professor only'))+ylab('Number of positions posted')+
+   scale_x_continuous(breaks = pretty_breaks(10)) + theme(axis.text.x = element_text(angle = 90))+ xlab("Year")+ggtitle('Number of job ads posted at H-NET') 
+  
+
 position_tab %>%
   mutate(prof=str_detect(position, 'Professor')) %>%
   mutate(prof = if_else(prof,  "Yes", "No")) %>%
@@ -266,6 +297,7 @@ position_tab %>%
   geom_label(aes(label=label_percent(accuracy=1)(freq)))+
   labs(fill='Professor positions')+
   theme_ipsum()
+  
   
 
 
@@ -344,6 +376,27 @@ graph_builder(secondary_cat_tab, women_obj, 'secondary', rel=T)
 
 
 
+```
+
+```{r women-prof-noprof}
+# let's build a data from primary and secondary categories AND positions
+# The aim: we somehow have to merge `hnet_structuredpost_primary_categories` with `hnet_structuredpost_positions` 
+
+pos_cat_dm <- dm %>%
+  dm_select(hnet_position, -one_of(drop.cols)) %>%
+  dm_select(hnet_structuredpost, -one_of(drop.cols))%>%
+  dm_select(hnet_structuredpost_primary_categories, -one_of(drop.cols))%>%
+  dm_rename(hnet_position, position=description)%>%
+  dm_disambiguate_cols(sep='.')%>%
+  dm_flatten_to_tbl(hnet_structuredpost,hnet_structuredpost_primary_categories, hnet_structuredpost_positions)
+
+cat_stp<- dm$hnet_structuredpost_primary_categories %>% as_tibble()
+
+pos_stp<- dm$hnet_structuredpost_positions %>% as_tibble()
+head(pos_stp)
+
+t<-full_join(cat_stp, pos_stp, by='structuredpost_id') %>% left_join(dm$hnet_structuredpost %>% as_tibble(), by=c('structuredpost_id'='id')) 
+left_join(t, dm$hnet_position %>% as_tibble(), by=c('position_id'='id'))
 ```
 
 
